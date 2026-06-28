@@ -15,7 +15,7 @@ This project implements a production-grade GUI automation agent that:
 4. **Writes** each post as `post_{id}.txt` in a configurable output directory
 5. **Repeats** the workflow for a configurable number of iterations
 
-The grounding implementation is inspired by ["GUI Agents with Dynamic Grounding"](https://arxiv.org/abs/2410.04209): icon detection is query-driven and position-agnostic, enabling the same pipeline to find *any* desktop element by natural-language description.
+The grounding implementation is inspired by ["GUI Agents with Dynamic Grounding"](https://arxiv.org/pdf/2504.07981): icon detection is query-driven and position-agnostic, enabling the same pipeline to find *any* desktop element by natural-language description.
 
 ---
 
@@ -113,6 +113,7 @@ vision-desktop-agent/
 - [uv](https://docs.astral.sh/uv/) (`pip install uv` or `curl -LsSf https://astral.sh/uv/install.sh | sh`)
 - Windows 10/11 (for Notepad automation; grounding module is cross-platform)
 - [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) installed and on PATH (for OCR bonus; optional but improves accuracy)
+- A Notepad shortcut icon must exist on the desktop before running (right-click desktop → New → Shortcut → browse to `C:\Windows\System32\notepad.exe`)
 
 ### Setup
 
