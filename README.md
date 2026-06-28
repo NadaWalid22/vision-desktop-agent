@@ -118,7 +118,7 @@ vision-desktop-agent/
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-username/vision-desktop-agent.git
+git clone https://github.com/NadaWalid22/vision-desktop-agent.git
 cd vision-desktop-agent
 
 # 2. Copy and configure environment variables
