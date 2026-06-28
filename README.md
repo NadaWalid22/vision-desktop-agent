@@ -149,7 +149,7 @@ uv run python src/main.py run
 uv run python src/main.py run \
     --iterations 5 \
     --posts 10 \
-    --output "C:/Users/YourName/Desktop/tjm-project" \
+    --output "C:/Users/%USERNAME%/Desktop/tjm-project" \
     --confidence 0.25 \
     --retries 3 \
     --log-level DEBUG \
