@@ -127,7 +127,7 @@ Classical template matching (`cv2.matchTemplate`) compares a reference icon imag
 
 ### 4.2 The "GUI Agents with Dynamic Grounding" Approach
 
-The referenced paper introduces the insight that visual grounding for GUI agents should be **query-driven and position-agnostic**: instead of searching for a specific pixel pattern, the system retrieves a region that best matches a *natural language description* of the target element. This is exactly how a human identifies an icon — by its semantic content ("the Notepad icon looks like a notepad with lines and a pencil"), not by memorising exact pixel values.
+Inspired by [GUI Agents with Dynamic Grounding](https://arxiv.org/pdf/2504.07981), the core insight that visual grounding for GUI agents should be **query-driven and position-agnostic**: instead of searching for a specific pixel pattern, the system retrieves a region that best matches a *natural language description* of the target element. This is exactly how a human identifies an icon — by its semantic content ("the Notepad icon looks like a notepad with lines and a pencil"), not by memorising exact pixel values.
 
 Our implementation operationalises this in three stages:
 
