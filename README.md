@@ -265,31 +265,6 @@ CLIP (ViT-B/32) encodes both the image crop and the text query into a shared 512
 
 ---
 
-## Interview Q&A
-
-**Q: Why grounding over template matching?**  
-Template matching fails on any icon size or theme change. CLIP's zero-shot semantic matching works on unseen icons — the same pipeline that finds Notepad can find Chrome, Slack, or an arbitrary "Submit" button without modification.
-
-**Q: What are the failure scenarios?**  
-Multiple visually similar icons (two text editors), desktop fully obscured, very low DPI resolution, unexpected popups. Each is mitigated — see `design_doc.md §6`.
-
-**Q: How would you scale this to browsers/unknown buttons?**  
-Change the query string. The architecture is already general. For agentic workflows: wrap in a planner that emits grounding queries step-by-step.
-
-**Q: How would you improve detection speed?**  
-(1) GPU for CLIP, (2) reduce proposals to 50–100 with better filtering, (3) cache proposals between nearby frames if the desktop is static, (4) use a lightweight YOLO-based UI detector as a fast first pass.
-
-**Q: Why the hybrid scoring weights (0.70/0.25/0.05)?**  
-CLIP is the most reliable signal; it gets the dominant weight. OCR is high-precision when it fires (exact text match) but absent for many icons; 0.25 is a significant but not decisive bonus. Aspect ratio is a weak regulariser; 0.05 nudges equally-scored proposals toward the more icon-like shape.
-
-**Q: How would you handle popups?**  
-`DesktopController.dismiss_dialog()` fires Esc+Enter as first-line recovery. For structured handling, run a secondary grounding pass looking for *"dialog close button"* or *"OK button"* after each action.
-
-**Q: Alternative approaches with more time?**  
-Run a lightweight GroundingDINO model (quantised to INT8) locally — it gives open-vocabulary detection at ~0.5 s on CPU with better bounding boxes. Or query a VLM API (GPT-4V) with the screenshot for highest accuracy, at the cost of a cloud round-trip.
-
----
-
 ## License
 
 MIT License — see `LICENSE` file.
