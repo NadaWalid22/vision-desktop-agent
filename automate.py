@@ -75,18 +75,43 @@ def _wait_for_notepad(timeout: float = 10.0) -> bool:
 
 
 def launch_notepad(grounder: VisualGrounder) -> bool:
-    result = grounder.locate_with_retry(_capture_bgr, "notepad", retries=MAX_RETRIES)
-    if not result:
-        logger.error("Notepad not found after {} attempts.", MAX_RETRIES)
-        return False
-    logger.info("Grounded Notepad at ({}, {}) [conf={:.3f}]", result.x, result.y, result.confidence)
-    pyautogui.moveTo(result.x, result.y, duration=0.3)
-    pyautogui.doubleClick()
-    if not _wait_for_notepad(timeout=10.0):
-        logger.error("Notepad window did not appear within 10s after double-click.")
-        return False
-    logger.info("Notepad window detected — ready.")
-    return True
+    original_threshold = grounder._ranker.confidence_threshold
+    for attempt in range(1, MAX_RETRIES + 1):
+        candidates = grounder.locate_all(_capture_bgr(), "notepad")
+        if candidates:
+            if len(candidates) > 1:
+                logger.warning(
+                    "{} Notepad candidates found — selecting top by CLIP score:", len(candidates)
+                )
+                for i, c in enumerate(candidates):
+                    logger.info(
+                        "  [{}] ({}, {}) conf={:.3f} clip={:.3f} ocr='{}'",
+                        i + 1, c.x, c.y, c.confidence, c.clip_score, c.detected_text,
+                    )
+            best = candidates[0]
+            logger.info(
+                "Selected Notepad at ({}, {}) [conf={:.3f}]", best.x, best.y, best.confidence
+            )
+            grounder._ranker.confidence_threshold = original_threshold
+            pyautogui.moveTo(best.x, best.y, duration=0.3)
+            pyautogui.doubleClick()
+            if not _wait_for_notepad(timeout=10.0):
+                logger.error("Notepad window did not appear within 10s after double-click.")
+                return False
+            logger.info("Notepad window detected — ready.")
+            return True
+
+        grounder._ranker.confidence_threshold = max(
+            0.10, original_threshold - 0.05 * attempt
+        )
+        logger.warning(
+            "Attempt {}/{}: no candidates — lowering threshold to {:.2f}",
+            attempt, MAX_RETRIES, grounder._ranker.confidence_threshold,
+        )
+
+    grounder._ranker.confidence_threshold = original_threshold
+    logger.error("Notepad not found after {} attempts.", MAX_RETRIES)
+    return False
 
 
 def type_post(post):

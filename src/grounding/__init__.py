@@ -113,6 +113,23 @@ class VisualGrounder:
         )
         return None
 
+    def locate_all(
+        self,
+        screenshot: "NDArray",
+        target_name: str,
+        query: str | None = None,
+    ) -> list[DetectionResult]:
+        """
+        Return ALL candidates for *target_name*, sorted by confidence descending.
+
+        Unlike locate(), which silently returns only the top hit, this exposes
+        the full ranked list so callers can handle the multiple-match case
+        (e.g. two Notepad icons on screen) explicitly.
+        """
+        effective_query = query or self._query_template.format(name=target_name)
+        proposals = self._detector.propose(screenshot)
+        return self._ranker.rank(proposals, effective_query, target_name)
+
     def locate_with_retry(
         self,
         screenshot_fn,
