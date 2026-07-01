@@ -28,7 +28,10 @@ The visual grounding step is the core deliverable: the program must locate the i
 
 ## 2. Assumptions
 
-- The Notepad icon is visible on the desktop at the start of each run (not minimized, not buried in a folder).
+- The Notepad icon is visible on the **unoccluded desktop** at the start of each run (not minimized, not buried in a folder, not hidden behind another window).
+- The desktop locale is **English** — the OCR text bonus matches the label "Notepad"; non-English locales will lose that signal and rely on CLIP similarity alone.
+- A **single display** is connected; multi-monitor setups may produce screenshots that include off-primary regions and confuse the region proposal stage.
+- **No Notepad window is already open** when the script starts; an existing open window may satisfy the `_wait_for_notepad` poll immediately, causing the wrong window to receive typed text.
 - Screen resolution and icon layout may vary between machines; the grounding step must not depend on fixed pixel coordinates.
 - Network access to the post API may be intermittent; a local cache provides a robust fallback so a transient outage does not block the run.
 - The program runs unattended once started — no manual clicking is required mid-run.
@@ -113,10 +116,12 @@ This project's two-pass coarse-to-fine design is a direct, small-scale applicati
 
 | Decision | Chosen | Alternative | Reason |
 |----------|--------|-------------|--------|
-| **Grounding model** | OmniParser (local) | Paid vision API (GPT-4o, Gemini) | No per-call cost; interpretable intermediate output |
+| **Grounding model** | CLIP zero-shot + region proposals (local) | GPT-4V / paid vision API | Free, runs offline, fully interpretable intermediate output (bounding boxes + scores) |
+| **Zero-shot vs fine-tuned** | CLIP zero-shot | Fine-tuned icon detector | Generalises to any desktop icon without training data; lower peak accuracy is an acceptable tradeoff |
+| **Region proposals vs YOLO** | Multi-strategy proposals (grid + contour + MSER) | YOLO icon detector | No training data required; zero-shot with respect to icon identity, matching the paper's insight |
+| **Local inference vs cloud** | Local OmniParser / CLIP | GPT-4o, Gemini Vision | No per-call cost, no network dependency, no data-privacy concern |
 | **GPU vs CPU** | Auto-detect, fall back to CPU | GPU-only | Portability over latency |
-| **Grounding frequency** | Re-ground every iteration | Cache coordinates after first detection | Proves genuine vision-based grounding |
-| **Full-screen parse** | Two-pass coarse-to-fine | Single full-screen pass | Higher accuracy on high-resolution displays per ScreenSpot-Pro |
+| **Grounding frequency** | Re-ground every iteration | Cache coordinates after first detection | Proves genuine vision-based grounding; robust to icon movement between cycles |
 
 ### Future Work
 
