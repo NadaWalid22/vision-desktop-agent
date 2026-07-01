@@ -6,8 +6,7 @@ Per post: fresh screenshot -> ground Notepad icon (OmniParser visual grounding)
 re-grounded from a fresh screenshot every iteration (no cached coordinates).
 """
 import os, json, time, requests, pyautogui
-from PIL import Image
-from util.utils import get_yolo_model, get_caption_model_processor, check_ocr_box
+from util.utils import check_ocr_box
 
 API_URL = "https://jsonplaceholder.typicode.com/posts"
 NUM_POSTS = 10
@@ -19,11 +18,6 @@ MAX_RETRIES = 3
 
 pyautogui.FAILSAFE = True
 pyautogui.PAUSE = 0.4
-
-print("Loading grounding models (CPU, this takes a moment)...")
-YOLO = get_yolo_model("weights/icon_detect/model.pt")
-CAPTION = get_caption_model_processor(model_name="florence2", model_name_or_path="weights/icon_caption_florence")
-print("Models loaded.\n")
 
 
 def fetch_posts(n):
