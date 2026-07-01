@@ -5,6 +5,7 @@ Per post: fresh screenshot -> ground Notepad icon (CLIP-based VisualGrounder)
 -> write the post to disk as post_{id}.txt -> close Notepad. The Notepad icon is
 re-grounded from a fresh screenshot every iteration (no cached coordinates).
 """
+import argparse
 import os, json, time, requests, pyautogui
 import numpy as np
 import cv2
@@ -145,13 +146,42 @@ def close_notepad():
     time.sleep(2)
 
 
+def dry_run(grounder: VisualGrounder) -> None:
+    """Ground Notepad and print all candidates without clicking anything."""
+    logger.info("DRY RUN — grounding only, no clicks.")
+    candidates = grounder.locate_all(_capture_bgr(), "notepad")
+    if not candidates:
+        logger.warning("No Notepad candidates found.")
+        return
+    logger.info("{} candidate(s) found:", len(candidates))
+    for i, c in enumerate(candidates):
+        logger.info(
+            "  [{}] x={} y={} conf={:.3f} clip={:.3f} ocr='{}'",
+            i + 1, c.x, c.y, c.confidence, c.clip_score, c.detected_text,
+        )
+    best = candidates[0]
+    logger.info("Top candidate: ({}, {}) conf={:.3f}", best.x, best.y, best.confidence)
+
+
 def main():
+    parser = argparse.ArgumentParser(description="Vision-based Notepad automation.")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Run grounding only and print coordinates without launching Notepad.",
+    )
+    args = parser.parse_args()
+
     os.makedirs(SAVE_DIR, exist_ok=True)
     logger.info("Log file: {}", os.path.abspath(LOG_FILE))
 
     logger.info("Loading CLIP grounding model (first run may take a moment)...")
     grounder = VisualGrounder()
     logger.info("VisualGrounder ready.")
+
+    if args.dry_run:
+        dry_run(grounder)
+        return
 
     posts = fetch_posts(NUM_POSTS)
     logger.info("Got {} posts. Saving to: {}", len(posts), SAVE_DIR)
