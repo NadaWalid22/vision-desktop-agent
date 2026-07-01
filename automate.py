@@ -6,7 +6,15 @@ Per post: fresh screenshot -> ground Notepad icon (OmniParser visual grounding)
 re-grounded from a fresh screenshot every iteration (no cached coordinates).
 """
 import os, json, time, requests, pyautogui
-from util.utils import check_ocr_box
+import numpy as np
+from PIL import Image
+from util.utils import (
+    get_yolo_model,
+    get_caption_model_processor,
+    check_ocr_box,
+    predict_yolo,
+    get_parsed_content_icon,
+)
 
 API_URL = "https://jsonplaceholder.typicode.com/posts"
 NUM_POSTS = 10
@@ -41,20 +49,57 @@ def fetch_posts(n):
     raise RuntimeError("No posts available.")
 
 
-def ground_notepad():
+def ground_notepad(yolo_model, caption_processor):
+    """
+    Full OmniParser grounding pipeline:
+      1. Screenshot -> EasyOCR (fast text match first)
+      2. YOLO icon detection -> Florence-2 captions -> semantic match
+    Returns (cx, cy) pixel coords of the Notepad icon, or None.
+    """
     pyautogui.screenshot().save(SCREENSHOT_PATH)
-    ocr_rslt, _ = check_ocr_box(SCREENSHOT_PATH, display_img=False, output_bb_format="xyxy", use_paddleocr=False)
-    text, ocr_bbox = ocr_rslt
-    for t, box in zip(text, ocr_bbox):
+    image = Image.open(SCREENSHOT_PATH).convert("RGB")
+    w, h = image.size
+    image_np = np.asarray(image)
+
+    # --- Stage 1: fast OCR pass (finds taskbar / desktop text labels) ---
+    ocr_rslt, _ = check_ocr_box(
+        SCREENSHOT_PATH, display_img=False, output_bb_format="xyxy", use_paddleocr=False
+    )
+    ocr_text, ocr_bbox = ocr_rslt
+    for t, box in zip(ocr_text, ocr_bbox):
         if TARGET_LABEL in t.lower():
             x1, y1, x2, y2 = box
             return (int((x1 + x2) / 2), int((y1 + y2) / 2))
+
+    # --- Stage 2: YOLO icon detection + Florence-2 captions ---
+    import torch
+    boxes_xyxy, _conf, _phrases = predict_yolo(
+        model=yolo_model, image=image, box_threshold=0.05, imgsz=(h, w), scale_img=False
+    )
+    if len(boxes_xyxy) == 0:
+        return None
+
+    # Normalise to [0,1] for get_parsed_content_icon
+    boxes_norm = boxes_xyxy / torch.tensor([w, h, w, h], dtype=torch.float32).to(boxes_xyxy.device)
+
+    captions = get_parsed_content_icon(
+        filtered_boxes=boxes_norm,
+        starting_idx=0,
+        image_source=image_np,
+        caption_model_processor=caption_processor,
+    )
+
+    for caption, box in zip(captions, boxes_xyxy.tolist()):
+        if TARGET_LABEL in caption.lower():
+            x1, y1, x2, y2 = box
+            return (int((x1 + x2) / 2), int((y1 + y2) / 2))
+
     return None
 
 
-def launch_notepad():
+def launch_notepad(yolo_model, caption_processor):
     for attempt in range(1, MAX_RETRIES + 1):
-        coords = ground_notepad()
+        coords = ground_notepad(yolo_model, caption_processor)
         if coords:
             x, y = coords
             print("  Grounded Notepad at (%d, %d) [attempt %d]" % (x, y, attempt))
@@ -68,7 +113,6 @@ def launch_notepad():
 
 
 def type_post(post):
-    """Type the post into the open Notepad (visual demonstration)."""
     pyautogui.hotkey("ctrl", "a")
     time.sleep(0.3)
     pyautogui.press("delete")
@@ -79,7 +123,6 @@ def type_post(post):
 
 
 def save_post_to_disk(post):
-    """Write the post to disk reliably (independent of the Notepad Save dialog)."""
     content = "Title: %s\n\n%s" % (post["title"], post["body"])
     filepath = os.path.join(SAVE_DIR, "post_%d.txt" % post["id"])
     with open(filepath, "w", encoding="utf-8") as f:
@@ -96,6 +139,15 @@ def close_notepad():
 
 def main():
     os.makedirs(SAVE_DIR, exist_ok=True)
+
+    print("Loading grounding models (CPU, this takes a moment)...")
+    yolo_model = get_yolo_model("weights/icon_detect/model.pt")
+    caption_processor = get_caption_model_processor(
+        model_name="florence2",
+        model_name_or_path="weights/icon_caption_florence",
+    )
+    print("Models loaded.\n")
+
     posts = fetch_posts(NUM_POSTS)
     print("Got %d posts. Saving to: %s\n" % (len(posts), SAVE_DIR))
     print("Starting in 6 seconds - click an empty spot on the desktop now!")
@@ -106,7 +158,7 @@ def main():
     for post in posts:
         print("\n--- Post %d ---" % post["id"])
         try:
-            if not launch_notepad():
+            if not launch_notepad(yolo_model, caption_processor):
                 print("  Could not launch Notepad; skipping.")
                 continue
             type_post(post)
