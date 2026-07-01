@@ -95,10 +95,12 @@ class CandidateRanker:
         extractor: CLIPEmbeddingExtractor | None = None,
         confidence_threshold: float = 0.25,
         use_ocr: bool = True,
+        dark_mode: bool = False,
     ) -> None:
         self._extractor = extractor or CLIPEmbeddingExtractor()
         self.confidence_threshold = confidence_threshold
         self.use_ocr = use_ocr
+        self.dark_mode = dark_mode
         self._ocr_available = self._check_ocr()
 
     def rank(
@@ -228,6 +230,12 @@ class CandidateRanker:
                     (pil.width * scale, pil.height * scale),
                     Image.LANCZOS,
                 )
+
+            # Tesseract expects dark text on a light background.
+            # Dark-theme desktops have light text on dark backgrounds, so invert.
+            if self.dark_mode:
+                from PIL import ImageOps
+                pil = ImageOps.invert(pil)
 
             config = "--psm 10 --oem 3 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 "
             text = pytesseract.image_to_string(pil, config=config).strip().lower()
