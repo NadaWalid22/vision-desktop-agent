@@ -16,3 +16,7 @@ current_screen.png
 run_log.txt
 posts_cache.json
 weights/
+htmlcov/
+coverage.xml
+.coverage
+automation_run.log
