@@ -252,9 +252,9 @@ class RegionProposalDetector:
         """
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         mser = cv2.MSER_create(
-            _delta=5,
-            _min_area=self.min_size ** 2 // 4,
-            _max_area=self.max_size ** 2,
+            5,
+            self.min_size ** 2 // 4,
+            self.max_size ** 2,
         )
         regions, _ = mser.detectRegions(gray)
 
