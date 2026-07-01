@@ -5,7 +5,6 @@ Per post: fresh screenshot -> ground Notepad icon (CLIP-based VisualGrounder)
 -> write the post to disk as post_{id}.txt -> close Notepad. The Notepad icon is
 re-grounded from a fresh screenshot every iteration (no cached coordinates).
 """
-import argparse
 import os, json, time, requests, pyautogui
 import numpy as np
 import cv2
@@ -47,11 +46,36 @@ def fetch_posts(n):
     raise RuntimeError("No posts available.")
 
 
+_DARK_THEME_QUERY = (
+    "a {name} application icon on a dark Windows desktop, small square icon"
+)
+_LIGHT_THEME_QUERY = (
+    "a {name} application icon on a Windows desktop, small square icon"
+)
+_DARK_LUMINANCE_THRESHOLD = 85  # mean luminance below this → dark theme
+
+
 def _capture_bgr() -> np.ndarray:
     """Capture the current screen as a BGR numpy array for VisualGrounder."""
     pil = pyautogui.screenshot()
     rgb = np.asarray(pil)
     return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+
+
+def _is_dark_theme(screenshot_bgr: np.ndarray) -> bool:
+    """
+    Return True when the desktop is using a dark colour scheme.
+
+    Uses a luminance histogram of the screenshot: convert to greyscale and
+    check whether the mean pixel brightness falls below a threshold.
+    Dark themes typically have mean luminance well below 128; light themes
+    sit above it.  A threshold of 85 gives comfortable headroom between the
+    two modes while staying robust to partially-dark wallpapers.
+    """
+    gray = cv2.cvtColor(screenshot_bgr, cv2.COLOR_BGR2GRAY)
+    mean_luminance = float(np.mean(gray))
+    logger.debug("Screen mean luminance: {:.1f}", mean_luminance)
+    return mean_luminance < _DARK_LUMINANCE_THRESHOLD
 
 
 def _wait_for_notepad(timeout: float = 10.0) -> bool:
@@ -78,7 +102,14 @@ def _wait_for_notepad(timeout: float = 10.0) -> bool:
 def launch_notepad(grounder: VisualGrounder) -> bool:
     original_threshold = grounder._ranker.confidence_threshold
     for attempt in range(1, MAX_RETRIES + 1):
-        candidates = grounder.locate_all(_capture_bgr(), "notepad")
+        screenshot = _capture_bgr()
+        dark = _is_dark_theme(screenshot)
+        grounder._ranker.dark_mode = dark
+        query_template = _DARK_THEME_QUERY if dark else _LIGHT_THEME_QUERY
+        logger.info("Theme detected: {}", "dark" if dark else "light")
+        candidates = grounder.locate_all(
+            screenshot, "notepad", query=query_template.format(name="notepad")
+        )
         if candidates:
             if len(candidates) > 1:
                 logger.warning(
@@ -146,42 +177,13 @@ def close_notepad():
     time.sleep(2)
 
 
-def dry_run(grounder: VisualGrounder) -> None:
-    """Ground Notepad and print all candidates without clicking anything."""
-    logger.info("DRY RUN — grounding only, no clicks.")
-    candidates = grounder.locate_all(_capture_bgr(), "notepad")
-    if not candidates:
-        logger.warning("No Notepad candidates found.")
-        return
-    logger.info("{} candidate(s) found:", len(candidates))
-    for i, c in enumerate(candidates):
-        logger.info(
-            "  [{}] x={} y={} conf={:.3f} clip={:.3f} ocr='{}'",
-            i + 1, c.x, c.y, c.confidence, c.clip_score, c.detected_text,
-        )
-    best = candidates[0]
-    logger.info("Top candidate: ({}, {}) conf={:.3f}", best.x, best.y, best.confidence)
-
-
 def main():
-    parser = argparse.ArgumentParser(description="Vision-based Notepad automation.")
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Run grounding only and print coordinates without launching Notepad.",
-    )
-    args = parser.parse_args()
-
     os.makedirs(SAVE_DIR, exist_ok=True)
     logger.info("Log file: {}", os.path.abspath(LOG_FILE))
 
     logger.info("Loading CLIP grounding model (first run may take a moment)...")
     grounder = VisualGrounder()
     logger.info("VisualGrounder ready.")
-
-    if args.dry_run:
-        dry_run(grounder)
-        return
 
     posts = fetch_posts(NUM_POSTS)
     logger.info("Got {} posts. Saving to: {}", len(posts), SAVE_DIR)
