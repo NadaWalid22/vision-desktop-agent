@@ -9,19 +9,24 @@ import os, json, time, requests, pyautogui
 import numpy as np
 import cv2
 from src.grounding import VisualGrounder
+from src.utils.logger import configure_logging, get_logger
 
 API_URL = "https://jsonplaceholder.typicode.com/posts"
 NUM_POSTS = 10
 SAVE_DIR = os.path.join(os.path.expanduser("~"), "Desktop", "tjm-project")
 CACHE_FILE = "posts_cache.json"
+LOG_FILE = "automation_run.log"
 MAX_RETRIES = 3
 
 pyautogui.FAILSAFE = True
 pyautogui.PAUSE = 0.4
 
+configure_logging(level="INFO", log_file=LOG_FILE)
+logger = get_logger(__name__)
+
 
 def fetch_posts(n):
-    print("Fetching %d posts from API..." % n)
+    logger.info("Fetching {} posts from API...", n)
     for attempt in range(1, 4):
         try:
             resp = requests.get(API_URL, timeout=30)
@@ -29,13 +34,13 @@ def fetch_posts(n):
             posts = resp.json()[:n]
             with open(CACHE_FILE, "w", encoding="utf-8") as f:
                 json.dump(posts, f)
-            print("  Fetched and cached %d posts." % len(posts))
+            logger.info("Fetched and cached {} posts.", len(posts))
             return posts
         except Exception as e:
-            print("  API attempt %d/3 failed: %s" % (attempt, e))
+            logger.warning("API attempt {}/3 failed: {}", attempt, e)
             time.sleep(2)
     if os.path.exists(CACHE_FILE):
-        print("  Network unavailable; using cached posts.")
+        logger.warning("Network unavailable; using cached posts.")
         with open(CACHE_FILE, encoding="utf-8") as f:
             return json.load(f)[:n]
     raise RuntimeError("No posts available.")
@@ -51,12 +56,12 @@ def _capture_bgr() -> np.ndarray:
 def launch_notepad(grounder: VisualGrounder) -> bool:
     result = grounder.locate_with_retry(_capture_bgr, "notepad", retries=MAX_RETRIES)
     if result:
-        print("  Grounded Notepad at (%d, %d) [conf=%.3f]" % (result.x, result.y, result.confidence))
+        logger.info("Grounded Notepad at ({}, {}) [conf={:.3f}]", result.x, result.y, result.confidence)
         pyautogui.moveTo(result.x, result.y, duration=0.3)
         pyautogui.doubleClick()
         time.sleep(3)
         return True
-    print("  Notepad not found after %d attempts." % MAX_RETRIES)
+    logger.error("Notepad not found after {} attempts.", MAX_RETRIES)
     return False
 
 
@@ -75,7 +80,10 @@ def save_post_to_disk(post):
     filepath = os.path.join(SAVE_DIR, "post_%d.txt" % post["id"])
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(content)
-    return os.path.exists(filepath)
+    exists = os.path.exists(filepath)
+    if exists:
+        logger.debug("Wrote {}", filepath)
+    return exists
 
 
 def close_notepad():
@@ -87,34 +95,35 @@ def close_notepad():
 
 def main():
     os.makedirs(SAVE_DIR, exist_ok=True)
+    logger.info("Log file: {}", os.path.abspath(LOG_FILE))
 
-    print("Loading CLIP grounding model (first run may take a moment)...")
+    logger.info("Loading CLIP grounding model (first run may take a moment)...")
     grounder = VisualGrounder()
-    print("VisualGrounder ready.\n")
+    logger.info("VisualGrounder ready.")
 
     posts = fetch_posts(NUM_POSTS)
-    print("Got %d posts. Saving to: %s\n" % (len(posts), SAVE_DIR))
-    print("Starting in 6 seconds - click an empty spot on the desktop now!")
-    print("Make sure NO Notepad window is open.")
+    logger.info("Got {} posts. Saving to: {}", len(posts), SAVE_DIR)
+    logger.info("Starting in 6 seconds — click an empty spot on the desktop now!")
+    logger.info("Make sure NO Notepad window is open.")
     time.sleep(6)
 
     success = 0
     for post in posts:
-        print("\n--- Post %d ---" % post["id"])
+        logger.info("--- Post {} ---", post["id"])
         try:
             if not launch_notepad(grounder):
-                print("  Could not launch Notepad; skipping.")
+                logger.warning("Could not launch Notepad; skipping post {}.", post["id"])
                 continue
             type_post(post)
             saved = save_post_to_disk(post)
             close_notepad()
             if saved:
                 success += 1
-                print("  Saved post_%d.txt" % post["id"])
+                logger.info("Saved post_{}.txt", post["id"])
             else:
-                print("  WARNING: post_%d.txt not written." % post["id"])
+                logger.warning("post_{}.txt was not written.", post["id"])
         except Exception as e:
-            print("  ERROR on post %d: %s" % (post["id"], e))
+            logger.exception("ERROR on post {}: {}", post["id"], e)
             try:
                 pyautogui.press("esc")
                 pyautogui.hotkey("alt", "F4")
@@ -124,8 +133,8 @@ def main():
                 pass
             continue
 
-    print("\nDone. %d/%d posts processed." % (success, len(posts)))
-    print("Files saved in: %s" % SAVE_DIR)
+    logger.info("Done. {}/{} posts processed.", success, len(posts))
+    logger.info("Files saved in: {}", SAVE_DIR)
     try:
         input("\nPress Enter to close...")
     except Exception:
