@@ -71,8 +71,11 @@ def type_post(post):
     pyautogui.press("delete")
     time.sleep(0.3)
     content = "Title: %s\n\n%s" % (post["title"], post["body"])
-    pyautogui.typewrite(content, interval=0.01)
-    time.sleep(0.4)
+    import pyperclip
+    pyperclip.copy(content)
+    time.sleep(0.15)
+    pyautogui.hotkey("ctrl", "v")
+    time.sleep(0.3)
 
 
 def save_post_to_disk(post):
